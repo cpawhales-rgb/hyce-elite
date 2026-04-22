@@ -99,7 +99,7 @@ body{margin:0;font-family:Arial,sans-serif;background:radial-gradient(circle at 
   <a href="reward-system.html">Rewards</a>
   <a href="contact.html">Contact Us</a>
   <a href="withdraw.html">Withdraw</a>
-  <a href="earn.html">Earn</a>
+  <a href="referral.html">Referral</a>
 </div>
 <div class="balance-box"><div class="balance-top"><div class="balance-amount" id="balance">0</div><div class="live-badge">Points Balance</div></div><div class="balance-meta" id="lastUpdated">Last updated: just now</div><div class="progress"><div class="progress-fill" id="progressFill"></div></div></div>
 <div class="stats-row"><div class="stat-mini"><b id="tasksCompleted">0</b><span>Tasks completed</span></div><div class="stat-mini"><b id="winRate">0%</b><span>Success rate</span></div><div class="stat-mini"><b id="totalPoints">0</b><span>Total points earned</span></div></div>
@@ -135,18 +135,12 @@ const premiumOffers = [
 ];
 
 // ========== 24-HOUR COOLDOWN SYSTEM ==========
-// Structure: taskCooldowns = { taskId: unlockTimestamp }
 let taskCooldowns = JSON.parse(localStorage.getItem('taskCooldowns')) || {};
 
 // RESET ALL TASKS - Clear all completed states (one-time fix)
-// This removes any existing "Completed" buttons
 localStorage.removeItem('rewardTasksCompleted');
-let completedTasks = []; // Empty array - all tasks reset to "Start Task"
+let completedTasks = [];
 
-// Also clear any old cooldowns if they exist (optional but good for fresh start)
-// localStorage.removeItem('taskCooldowns'); // Uncomment if you want to clear all cooldowns too
-
-// Save the empty completed tasks
 localStorage.setItem('rewardTasksCompleted', JSON.stringify(completedTasks));
 
 // ========== FAKE TESTIMONIALS ==========
@@ -182,7 +176,6 @@ let todayPoints = parseInt(localStorage.getItem('todayPoints')) || 0;
 let lastResetDate = localStorage.getItem('lastResetDate') || "";
 let pointsLedger = JSON.parse(localStorage.getItem('pointsLedger')) || [];
 
-// Daily reset at user's local midnight
 function checkAndResetDaily() {
   let today = new Date().toDateString();
   if (lastResetDate !== today) {
@@ -194,10 +187,8 @@ function checkAndResetDaily() {
 }
 checkAndResetDaily();
 
-// Helper: Add points with daily limit & 40 max per transaction
 function addPointsWithLimits(taskId, rawPoints, taskName) {
   let pointsToAdd = Math.min(rawPoints, 40);
-  
   let remainingToday = 250 - todayPoints;
   if (pointsToAdd > remainingToday) {
     pointsToAdd = remainingToday;
@@ -207,11 +198,9 @@ function addPointsWithLimits(taskId, rawPoints, taskName) {
     }
     showToast(`Daily limit: awarded ${pointsToAdd} points instead of ${rawPoints} (max 250/day)`);
   }
-  
   userPoints += pointsToAdd;
   todayPoints += pointsToAdd;
   totalPointsEarned += pointsToAdd;
-  
   pointsLedger.push({
     type: 'task_completion',
     taskId: taskId,
@@ -221,16 +210,13 @@ function addPointsWithLimits(taskId, rawPoints, taskName) {
     timestamp: new Date().toISOString(),
     date: new Date().toLocaleString()
   });
-  
   localStorage.setItem('userPoints', userPoints);
   localStorage.setItem('totalPointsEarned', totalPointsEarned);
   localStorage.setItem('todayPoints', todayPoints);
   localStorage.setItem('pointsLedger', JSON.stringify(pointsLedger));
-  
   return pointsToAdd;
 }
 
-// ========== TOGGLE SIDEBAR ==========
 function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
   document.getElementById('overlay').classList.toggle('show');
@@ -246,17 +232,12 @@ function showToast(message, isError = false) {
 
 function updateUI() {
   document.getElementById('balance').innerText = userPoints;
-  // Count only tasks that are currently in cooldown (not available)
-  let activeCooldowns = Object.keys(taskCooldowns).filter(id => {
-    return taskCooldowns[id] > Date.now();
-  }).length;
+  let activeCooldowns = Object.keys(taskCooldowns).filter(id => taskCooldowns[id] > Date.now()).length;
   document.getElementById('tasksCompleted').innerText = activeCooldowns;
   document.getElementById('totalPoints').innerText = totalPointsEarned;
   document.getElementById('streakCount').innerText = streak;
-  
   let winRate = activeCooldowns > 0 ? Math.min(Math.floor((activeCooldowns / premiumOffers.length) * 100), 100) : 0;
   document.getElementById('winRate').innerText = winRate + '%';
-  
   let progressPercent = Math.min((userPoints / 5000) * 100, 100);
   document.getElementById('progressFill').style.width = progressPercent + '%';
   document.getElementById('lastUpdated').innerText = 'Last updated: ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
@@ -265,16 +246,13 @@ function updateUI() {
 function updateStreak() {
   let today = new Date().toDateString();
   if (lastTaskDate === today) return;
-  
   let yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  
   if (lastTaskDate === yesterday.toDateString()) {
     streak++;
   } else if (lastTaskDate !== today) {
     streak = 1;
   }
-  
   lastTaskDate = today;
   localStorage.setItem('streak', streak);
   localStorage.setItem('lastTaskDate', lastTaskDate);
@@ -289,21 +267,16 @@ function addToRecent(offerName, points) {
   newItem.innerHTML = `<span>${offerName}</span><strong style="color:#facc15">+${points} pts</strong>`;
   recentList.insertBefore(newItem, recentList.firstChild);
   if(recentList.children.length > 6) recentList.removeChild(recentList.lastChild);
-  
   let recentEarnings = JSON.parse(localStorage.getItem('recentEarnings')) || [];
   recentEarnings.unshift({ name: offerName, points: points, time: time });
   if(recentEarnings.length > 10) recentEarnings.pop();
   localStorage.setItem('recentEarnings', JSON.stringify(recentEarnings));
 }
 
-// ========== START TASK ==========
 function startTask(offerId, event) {
   if(event) event.stopPropagation();
-  
   let offer = premiumOffers.find(o => o.id === offerId);
   if(!offer) return;
-  
-  // Check if task is in cooldown
   let cooldownEnd = taskCooldowns[offerId];
   if (cooldownEnd && cooldownEnd > Date.now()) {
     let remaining = Math.ceil((cooldownEnd - Date.now()) / 1000);
@@ -313,55 +286,40 @@ function startTask(offerId, event) {
     showToast(`Task on cooldown! Available in ${hours}h ${minutes}m ${seconds}s`, true);
     return;
   }
-  
   localStorage.setItem('activeTaskId', offerId);
   localStorage.setItem('activeTaskPoints', offer.points);
   localStorage.setItem('activeTaskName', offer.name);
   localStorage.setItem('activeTaskRequiredSeconds', offer.requiredSeconds);
-  
   window.location.href = 'task.html?id=' + offerId;
 }
 
-// ========== CHECK FOR COMPLETED TASK & START COOLDOWN ==========
 function checkForCompletedTask() {
   let justCompleted = localStorage.getItem('justCompletedTask');
   if(justCompleted) {
     let taskData = JSON.parse(justCompleted);
     let offer = premiumOffers.find(o => o.id === taskData.id);
-    
     if(offer) {
       updateStreak();
-      
       let streakBonus = Math.min(streak * 0.02, 0.5);
       let rawPoints = Math.floor(offer.points * (1 + streakBonus));
-      
       let awardedPoints = addPointsWithLimits(taskData.id, rawPoints, offer.name);
-      
       if(awardedPoints && awardedPoints > 0) {
-        // START 24-HOUR COOLDOWN (24 hours = 86400000 milliseconds)
         let cooldownEnd = Date.now() + (24 * 60 * 60 * 1000);
         taskCooldowns[taskData.id] = cooldownEnd;
         localStorage.setItem('taskCooldowns', JSON.stringify(taskCooldowns));
-        
         showToast(`+${awardedPoints} points for ${offer.name}! Task will reset in 24 hours.`);
         addToRecent(offer.name, awardedPoints);
       }
-      
       localStorage.removeItem('justCompletedTask');
       updateUI();
       renderPremiumGrid();
-      
-      // Start interval to update countdowns
       startCountdownInterval();
     }
   }
 }
 
-// Format cooldown time
 function getCooldownDisplay(cooldownEnd) {
-  if (!cooldownEnd || cooldownEnd <= Date.now()) {
-    return null;
-  }
+  if (!cooldownEnd || cooldownEnd <= Date.now()) return null;
   let remaining = Math.ceil((cooldownEnd - Date.now()) / 1000);
   let hours = Math.floor(remaining / 3600);
   let minutes = Math.floor((remaining % 3600) / 60);
@@ -370,36 +328,29 @@ function getCooldownDisplay(cooldownEnd) {
 }
 
 let countdownInterval = null;
-
 function startCountdownInterval() {
   if (countdownInterval) clearInterval(countdownInterval);
-  countdownInterval = setInterval(() => {
-    renderPremiumGrid(); // Re-render to update countdowns
-  }, 1000);
+  countdownInterval = setInterval(() => renderPremiumGrid(), 1000);
 }
 
 function renderPremiumGrid() {
   let grid = document.getElementById('premiumGrid');
   if(!grid) return;
   grid.innerHTML = '';
-  
   premiumOffers.forEach(offer => {
     let cooldownEnd = taskCooldowns[offer.id];
     let isOnCooldown = cooldownEnd && cooldownEnd > Date.now();
     let cooldownText = isOnCooldown ? getCooldownDisplay(cooldownEnd) : null;
     let difficultyColor = offer.difficulty === 'Easy' ? '#22c55e' : (offer.difficulty === 'Medium' ? '#facc15' : '#ef4444');
     let displayPoints = Math.min(offer.points, 40);
-    
     let card = document.createElement('div');
     card.className = 'premium-card';
-    
     let buttonHtml = '';
     if (isOnCooldown) {
       buttonHtml = `<button class="premium-btn" disabled style="opacity:0.7; background:#4b5563;">⏳ ${cooldownText}</button>`;
     } else {
       buttonHtml = `<button class="premium-btn" onclick="startTask(${offer.id}, event)">Start Task</button>`;
     }
-    
     card.innerHTML = `
       <div class="premium-icon" style="background: linear-gradient(135deg, ${offer.color}, ${offer.color}88);">${offer.icon}</div>
       <div class="premium-info">
@@ -417,7 +368,6 @@ function renderPremiumGrid() {
         ${buttonHtml}
       </div>
     `;
-    
     card.onclick = (e) => {
       if(!isOnCooldown && !e.target.classList.contains('premium-btn')) {
         startTask(offer.id, e);
@@ -429,7 +379,6 @@ function renderPremiumGrid() {
         showToast(`Task available in ${hours}h ${minutes}m ${seconds}s`, true);
       }
     };
-    
     grid.appendChild(card);
   });
 }
@@ -437,12 +386,10 @@ function renderPremiumGrid() {
 function loadRecentEarnings() {
   let recentEarnings = JSON.parse(localStorage.getItem('recentEarnings')) || [];
   let recentList = document.getElementById('recentList');
-  
   if(recentEarnings.length === 0) {
     recentList.innerHTML = '<div class="recent-item">No earnings yet. Complete a task to get started!</div>';
     return;
   }
-  
   recentList.innerHTML = recentEarnings.slice(0, 6).map(item => `
     <div class="recent-item">
       <span>${item.name}</span>
@@ -451,14 +398,11 @@ function loadRecentEarnings() {
   `).join('');
 }
 
-// Render testimonials
 function renderTestimonials() {
   let grid = document.getElementById('testimonialGrid');
   if(!grid) return;
-  
   let shuffled = [...testimonials].sort(() => 0.5 - Math.random());
   let selected = shuffled.slice(0, 8);
-  
   grid.innerHTML = selected.map(t => `
     <div class="testimonial-card">
       <div class="testimonial-header">
@@ -480,7 +424,6 @@ function setRegionLock() {
   document.querySelector('.main-task').onclick = () => showToast('Complete any task above to earn points!');
 }
 
-// ========== INITIALIZE ==========
 function init() {
   setRegionLock();
   renderPremiumGrid();
@@ -488,16 +431,13 @@ function init() {
   renderTestimonials();
   updateUI();
   checkForCompletedTask();
-  startCountdownInterval(); // Start updating countdowns every second
+  startCountdownInterval();
 }
-
 init();
 
-// ========== LIVE FEED ==========
 const feed = document.getElementById('feed');
 const names = ['John (UK)', 'Emma (US)', 'Liam (CA)', 'Noah (AU)', 'Sophia (NZ)', 'Carlos (ES)', 'Mia (IT)', 'Lucas (FR)'];
 const pointEarnings = ['+25 pts', '+30 pts', '+35 pts', '+40 pts', '+28 pts', '+38 pts', '+32 pts'];
-
 function showFeed() {
   let user = names[Math.floor(Math.random() * names.length)];
   let points = pointEarnings[Math.floor(Math.random() * pointEarnings.length)];
@@ -506,7 +446,6 @@ function showFeed() {
 setInterval(showFeed, 6000);
 setTimeout(showFeed, 1000);
 
-// ========== FAQ TOGGLE ==========
 document.querySelectorAll('.faq-item').forEach(item => {
   item.querySelector('.faq-q').onclick = () => item.classList.toggle('active');
 });
