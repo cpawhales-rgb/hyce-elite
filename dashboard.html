@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HYCE Elite</title>
 <style>
+/* ========== YOUR EXISTING STYLES (exactly as you had them) ========== */
 body{margin:0;font-family:Arial,sans-serif;background:radial-gradient(circle at top,#0f172a,#020617);color:#fff;overflow-x:hidden}
 *{box-sizing:border-box}
 .topbar{display:flex;align-items:center;gap:12px;padding:14px 16px;background:#020617;border-bottom:1px solid #1f2937;position:sticky;top:0;z-index:1200}
@@ -110,10 +111,7 @@ body{margin:0;font-family:Arial,sans-serif;background:radial-gradient(circle at 
 <div class="premium-grid" id="premiumGrid"></div>
 <div class="streak-wrap"><div class="panel"><h2>Daily Streak</h2><div class="streak"><div><div class="mini-title">CURRENT RUN</div><div class="count" id="streakCount">0</div></div><div class="mini-sub">Complete tasks daily to build your streak!</div></div></div></div>
 <div class="recent-wrap"><div class="panel"><h2>Recent Earnings</h2><div class="recent-list" id="recentList"></div></div></div>
-
-<!-- NEW: FAKE TESTIMONIALS SECTION -->
 <div class="testimonials-wrap"><div class="panel"><h2>⭐ What Our Members Say</h2><div class="testimonial-grid" id="testimonialGrid"></div></div></div>
-
 <div class="how-wrap"><div class="panel"><h2>How It Works</h2><div class="step-grid"><div class="step"><b>1. Pick an offer</b><div style="opacity:.8;font-size:13px;margin-top:6px">Choose any premium offer card.</div></div><div class="step"><b>2. Start Task</b><div style="opacity:.8;font-size:13px;margin-top:6px">Click "Start Task" to begin the offer.</div></div><div class="step"><b>3. Complete & Verify</b><div style="opacity:.8;font-size:13px;margin-top:6px">Follow instructions on task page, then click "Verify & Claim".</div></div></div></div></div>
 <div class="referral-wrap"><div class="panel"><h2>Referral</h2><p>Invite friends to explore HYCE and build your streak together. Share your unique code and earn 100 points per referral!</p></div></div>
 <div class="faq-wrap"><div class="panel"><h2>FAQ</h2><div class="faq-list"><div class="faq-item"><div class="faq-q">What happens when I pass?</div><div class="faq-a">You receive bonus points and unlock higher point multipliers up to 2x.</div></div><div class="faq-item"><div class="faq-q">Can I lose points?</div><div class="faq-a">No, points are only earned, never deducted. Complete tasks to grow your balance.</div></div><div class="faq-item"><div class="faq-q">How long does verification take?</div><div class="faq-a">Tasks require you to spend time on the offer page before verifying.</div></div></div></div></div>
@@ -121,7 +119,39 @@ body{margin:0;font-family:Arial,sans-serif;background:radial-gradient(circle at 
 <div id="feed" class="live-feed"></div><div class="toast" id="toast"></div>
 
 <script>
-// ========== TASKS DATA ==========
+// ========== AUTHENTICATION (redirect if not logged in) ==========
+const currentUser = localStorage.getItem('hyce_user');
+const currentPin = localStorage.getItem('hyce_pin');
+if (!currentUser || !currentPin) {
+  window.location.href = 'login.html';
+}
+
+// ========== GOOGLE SHEETS BACKEND ==========
+const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzy8OkQDMQg0z4UCnwPc-5b-yaJkUsHEi6lMDQT09uMw1TUPz2dQrbZKQmsvd42hrLH/exec';
+let currentPoints = 0;
+
+async function apiCall(action, params, method = 'POST') {
+  const url = new URL(APP_SCRIPT_URL);
+  url.searchParams.append('action', action);
+  Object.keys(params).forEach(k => url.searchParams.append(k, params[k]));
+  const response = await fetch(url.toString(), { method });
+  return response.json();
+}
+
+async function refreshPoints() {
+  if (!currentUser) return;
+  const res = await apiCall('getPoints', { username: currentUser }, 'GET');
+  if (res.success) {
+    currentPoints = res.points;
+    document.getElementById('balance').innerText = currentPoints;
+    document.getElementById('totalPoints').innerText = currentPoints;
+    let progressPercent = Math.min((currentPoints / 5000) * 100, 100);
+    document.getElementById('progressFill').style.width = progressPercent + '%';
+    document.getElementById('lastUpdated').innerText = 'Last updated: ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  }
+}
+
+// ========== TASKS DATA (unchanged) ==========
 const premiumOffers = [
   { id: 1, name: 'Grab Superapp', desc: 'Everyday Everything App', icon: '🛒', rating: '★★★★★', reviews: '386K', points: 25, tag: 'Hot', color: '#facc15', difficulty: 'Easy', requiredSeconds: 15 },
   { id: 2, name: 'Mystic Rewards', desc: 'Play & Earn Daily', icon: '🎮', rating: '★★★★★', reviews: '124K', points: 40, tag: 'Limited', color: '#8b5cf6', difficulty: 'Medium', requiredSeconds: 30 },
@@ -135,16 +165,11 @@ const premiumOffers = [
   { id: 10, name: 'Bonus Blitz', desc: 'Fast Cash Rewards', icon: '⚡', rating: '★★★★★', reviews: '321K', points: 60, tag: 'Hot', color: '#a855f7', difficulty: 'Hard', requiredSeconds: 50 }
 ];
 
-// ========== 24-HOUR COOLDOWN SYSTEM ==========
+// ========== 24-HOUR COOLDOWN (localStorage) ==========
 let taskCooldowns = JSON.parse(localStorage.getItem('taskCooldowns')) || {};
+localStorage.removeItem('rewardTasksCompleted'); // clean legacy
 
-// RESET ALL TASKS - Clear all completed states (one-time fix)
-localStorage.removeItem('rewardTasksCompleted');
-let completedTasks = [];
-
-localStorage.setItem('rewardTasksCompleted', JSON.stringify(completedTasks));
-
-// ========== FAKE TESTIMONIALS ==========
+// ========== FAKE TESTIMONIALS (unchanged) ==========
 const testimonials = [
   { name: "Sarah Johnson", location: "New York, USA", text: "Made $150 in my first week! The tasks are super easy and pay instantly.", stars: 5, avatar: "SJ" },
   { name: "Michael Chen", location: "Toronto, CA", text: "Legit platform. Withdrew $50 to PayPal in 2 hours. Highly recommend!", stars: 5, avatar: "MC" },
@@ -168,56 +193,7 @@ const testimonials = [
   { name: "Jordan King", location: "Auckland, NZ", text: "Easy money while watching TV. Highly recommend to everyone.", stars: 4, avatar: "JK" }
 ];
 
-// ========== DAILY LIMIT & POINTS LEDGER ==========
-let userPoints = parseInt(localStorage.getItem('userPoints')) || 0;
-let totalPointsEarned = parseInt(localStorage.getItem('totalPointsEarned')) || 0;
-let streak = parseInt(localStorage.getItem('streak')) || 0;
-let lastTaskDate = localStorage.getItem('lastTaskDate') || null;
-let todayPoints = parseInt(localStorage.getItem('todayPoints')) || 0;
-let lastResetDate = localStorage.getItem('lastResetDate') || "";
-let pointsLedger = JSON.parse(localStorage.getItem('pointsLedger')) || [];
-
-function checkAndResetDaily() {
-  let today = new Date().toDateString();
-  if (lastResetDate !== today) {
-    todayPoints = 0;
-    localStorage.setItem('todayPoints', '0');
-    localStorage.setItem('lastResetDate', today);
-    lastResetDate = today;
-  }
-}
-checkAndResetDaily();
-
-function addPointsWithLimits(taskId, rawPoints, taskName) {
-  let pointsToAdd = Math.min(rawPoints, 40);
-  let remainingToday = 250 - todayPoints;
-  if (pointsToAdd > remainingToday) {
-    pointsToAdd = remainingToday;
-    if (pointsToAdd <= 0) {
-      showToast("Daily limit reached (250 points). Try again tomorrow!", true);
-      return false;
-    }
-    showToast(`Daily limit: awarded ${pointsToAdd} points instead of ${rawPoints} (max 250/day)`);
-  }
-  userPoints += pointsToAdd;
-  todayPoints += pointsToAdd;
-  totalPointsEarned += pointsToAdd;
-  pointsLedger.push({
-    type: 'task_completion',
-    taskId: taskId,
-    taskName: taskName,
-    rawPoints: rawPoints,
-    awardedPoints: pointsToAdd,
-    timestamp: new Date().toISOString(),
-    date: new Date().toLocaleString()
-  });
-  localStorage.setItem('userPoints', userPoints);
-  localStorage.setItem('totalPointsEarned', totalPointsEarned);
-  localStorage.setItem('todayPoints', todayPoints);
-  localStorage.setItem('pointsLedger', JSON.stringify(pointsLedger));
-  return pointsToAdd;
-}
-
+// ========== HELPER FUNCTIONS ==========
 function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
   document.getElementById('overlay').classList.toggle('show');
@@ -232,46 +208,17 @@ function showToast(message, isError = false) {
 }
 
 function updateUI() {
-  document.getElementById('balance').innerText = userPoints;
+  document.getElementById('balance').innerText = currentPoints;
   let activeCooldowns = Object.keys(taskCooldowns).filter(id => taskCooldowns[id] > Date.now()).length;
   document.getElementById('tasksCompleted').innerText = activeCooldowns;
-  document.getElementById('totalPoints').innerText = totalPointsEarned;
+  document.getElementById('totalPoints').innerText = currentPoints;
+  let streak = parseInt(localStorage.getItem('streak')) || 0;
   document.getElementById('streakCount').innerText = streak;
   let winRate = activeCooldowns > 0 ? Math.min(Math.floor((activeCooldowns / premiumOffers.length) * 100), 100) : 0;
   document.getElementById('winRate').innerText = winRate + '%';
-  let progressPercent = Math.min((userPoints / 5000) * 100, 100);
+  let progressPercent = Math.min((currentPoints / 5000) * 100, 100);
   document.getElementById('progressFill').style.width = progressPercent + '%';
   document.getElementById('lastUpdated').innerText = 'Last updated: ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-}
-
-function updateStreak() {
-  let today = new Date().toDateString();
-  if (lastTaskDate === today) return;
-  let yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (lastTaskDate === yesterday.toDateString()) {
-    streak++;
-  } else if (lastTaskDate !== today) {
-    streak = 1;
-  }
-  lastTaskDate = today;
-  localStorage.setItem('streak', streak);
-  localStorage.setItem('lastTaskDate', lastTaskDate);
-  updateUI();
-}
-
-function addToRecent(offerName, points) {
-  let recentList = document.getElementById('recentList');
-  let newItem = document.createElement('div');
-  newItem.className = 'recent-item';
-  let time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-  newItem.innerHTML = `<span>${offerName}</span><strong style="color:#facc15">+${points} pts</strong>`;
-  recentList.insertBefore(newItem, recentList.firstChild);
-  if(recentList.children.length > 6) recentList.removeChild(recentList.lastChild);
-  let recentEarnings = JSON.parse(localStorage.getItem('recentEarnings')) || [];
-  recentEarnings.unshift({ name: offerName, points: points, time: time });
-  if(recentEarnings.length > 10) recentEarnings.pop();
-  localStorage.setItem('recentEarnings', JSON.stringify(recentEarnings));
 }
 
 function startTask(offerId, event) {
@@ -300,22 +247,27 @@ function checkForCompletedTask() {
     let taskData = JSON.parse(justCompleted);
     let offer = premiumOffers.find(o => o.id === taskData.id);
     if(offer) {
-      updateStreak();
-      let streakBonus = Math.min(streak * 0.02, 0.5);
-      let rawPoints = Math.floor(offer.points * (1 + streakBonus));
-      let awardedPoints = addPointsWithLimits(taskData.id, rawPoints, offer.name);
-      if(awardedPoints && awardedPoints > 0) {
-        let cooldownEnd = Date.now() + (24 * 60 * 60 * 1000);
-        taskCooldowns[taskData.id] = cooldownEnd;
-        localStorage.setItem('taskCooldowns', JSON.stringify(taskCooldowns));
-        showToast(`+${awardedPoints} points for ${offer.name}! Task will reset in 24 hours.`);
-        addToRecent(offer.name, awardedPoints);
+      let streak = parseInt(localStorage.getItem('streak')) || 0;
+      let lastTaskDate = localStorage.getItem('lastTaskDate') || null;
+      let today = new Date().toDateString();
+      let yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      if (lastTaskDate === yesterday.toDateString()) {
+        streak++;
+      } else if (lastTaskDate !== today) {
+        streak = 1;
       }
-      localStorage.removeItem('justCompletedTask');
-      updateUI();
-      renderPremiumGrid();
-      startCountdownInterval();
+      localStorage.setItem('streak', streak);
+      localStorage.setItem('lastTaskDate', today);
+      
+      let cooldownEnd = Date.now() + (24 * 60 * 60 * 1000);
+      taskCooldowns[taskData.id] = cooldownEnd;
+      localStorage.setItem('taskCooldowns', JSON.stringify(taskCooldowns));
+      showToast(`Task completed! +${taskData.points} points added. Next task available in 24h.`);
+      refreshPoints().then(() => updateUI());
     }
+    localStorage.removeItem('justCompletedTask');
+    renderPremiumGrid();
   }
 }
 
@@ -425,17 +377,20 @@ function setRegionLock() {
   document.querySelector('.main-task').onclick = () => showToast('Complete any task above to earn points!');
 }
 
-function init() {
+async function init() {
   setRegionLock();
   renderPremiumGrid();
   loadRecentEarnings();
   renderTestimonials();
+  await refreshPoints();
   updateUI();
   checkForCompletedTask();
   startCountdownInterval();
+  setInterval(refreshPoints, 10000);
 }
 init();
 
+// Live feed
 const feed = document.getElementById('feed');
 const names = ['John (UK)', 'Emma (US)', 'Liam (CA)', 'Noah (AU)', 'Sophia (NZ)', 'Carlos (ES)', 'Mia (IT)', 'Lucas (FR)'];
 const pointEarnings = ['+25 pts', '+30 pts', '+35 pts', '+40 pts', '+28 pts', '+38 pts', '+32 pts'];
