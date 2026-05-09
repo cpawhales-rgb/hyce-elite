@@ -109,29 +109,34 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none}
 <div id="toast" class="toast"></div>
 
 <script>
-// ========== GOOGLE SHEETS BACKEND INTEGRATION ==========
-const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzy8OkQDMQg0z4UCnwPc-5b-yaJkUsHEi6lMDQT09uMw1TUPz2dQrbZKQmsvd42hrLH/exec';
+// ========== GOOGLE SHEETS BACKEND (UPDATED: JSON BODY) ==========
+const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwqYH4fXKCb5gW0yxRV_6DkPVC5wPXF9z0TO93W49-EGetANPv5kkovCoXt-qa07N4Tpw/exec';
 
-// Get logged-in user from localStorage (set by dashboard)
+// Get logged-in user from localStorage (set by login page)
 const currentUser = localStorage.getItem('hyce_user');
 const currentPin = localStorage.getItem('hyce_pin');
 
 if (!currentUser || !currentPin) {
-  alert('Please log in from the dashboard first.');
-  window.location.href = 'dashboard.html';
+  alert('Please log in first.');
+  window.location.href = 'login.html';
 }
 
-async function apiCall(action, params, method = 'POST') {
-  const url = new URL(APP_SCRIPT_URL);
-  url.searchParams.append('action', action);
-  Object.keys(params).forEach(k => url.searchParams.append(k, params[k]));
-  const response = await fetch(url.toString(), { method });
+async function apiCall(action, params) {
+  const requestBody = {
+    action: action,
+    ...params
+  };
+  const response = await fetch(APP_SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify(requestBody),
+    headers: { 'Content-Type': 'application/json' }
+  });
   return response.json();
 }
 
-// ========== TASK DATA (matching dashboard's 10 tasks) ==========
-let params = new URLSearchParams(window.location.search);
-let taskId = parseInt(params.get("id"));
+// ========== TASK DATA ==========
+let urlParams = new URLSearchParams(window.location.search);
+let taskId = parseInt(urlParams.get("id"));
 
 const taskList = [
   "Grab Superapp", "Mystic Rewards", "Cash Galaxy", "Fortune Wheel",
@@ -147,19 +152,17 @@ const taskLinks = [
   "https://example.com/offer9", "https://example.com/offer10"
 ];
 
-const taskPointsMap = {
-  1:25,2:40,3:35,4:20,5:50,6:30,7:15,8:75,9:45,10:60
-};
+const taskPointsMap = {1:25,2:40,3:35,4:20,5:50,6:30,7:15,8:75,9:45,10:60};
 function getTaskPoints() {
   let raw = taskPointsMap[taskId] || 25;
   return Math.min(raw, 40);
 }
 let currentTaskPoints = getTaskPoints();
 
-// ========== COOLDOWN CHECK (uses localStorage, same as dashboard) ==========
+// Cooldown (localStorage)
 let taskCooldowns = JSON.parse(localStorage.getItem('taskCooldowns')) || {};
 
-// ========== UI Elements ==========
+// UI elements
 document.getElementById("taskTitle").innerText = taskList[taskId-1];
 document.getElementById('taskHint').innerText = 'Task #' + taskId + ' selected';
 document.getElementById('pointsDisplay').innerHTML = currentTaskPoints + ' Points';
@@ -169,7 +172,7 @@ let reviewTimer = null;
 let reviewSeconds = 60;
 let uploadedImageData = null;
 let isUnderReview = false;
-let completionLock = false;  // prevent double awarding
+let completionLock = false;
 
 const statusEl = document.getElementById('status');
 const timerEl = document.getElementById('timer');
@@ -193,13 +196,11 @@ function showToast(msg, isErr=false){
 function setProgress(percent){progressFill.style.width = Math.min(percent,100) + '%';}
 function showHint(){showToast('Start task, complete it, upload screenshot, wait 60 seconds review, then get points');}
 
-// Check cooldown before allowing start
 function isTaskOnCooldown() {
   let cooldownEnd = taskCooldowns[taskId];
   return cooldownEnd && cooldownEnd > Date.now();
 }
 
-// Disable start if already completed in localStorage (cooldown-based)
 if (isTaskOnCooldown()) {
   let cooldownEnd = taskCooldowns[taskId];
   let remain = Math.ceil((cooldownEnd - Date.now())/1000);
@@ -291,8 +292,6 @@ async function uploadAndReview() {
       clearInterval(reviewTimer);
       timerEl.innerText = "✅ Review complete!";
       setProgress(100);
-      
-      // Award points via API (server enforces max 40 and daily limit)
       awardPointsViaAPI();
     }
   }, 1000);
@@ -305,19 +304,17 @@ async function awardPointsViaAPI() {
   try {
     const result = await apiCall('addPoints', {
       username: currentUser,
-      pin: currentPin,
       taskId: taskId,
-      points: currentTaskPoints   // task page already caps at 40
+      points: currentTaskPoints
     });
     
     if (result.success) {
-      // Start 24-hour cooldown in localStorage
+      // Start 24-hour cooldown
       let cooldownEnd = Date.now() + (24 * 60 * 60 * 1000);
       taskCooldowns[taskId] = cooldownEnd;
       localStorage.setItem('taskCooldowns', JSON.stringify(taskCooldowns));
       localStorage.removeItem("activeTaskId");
       
-      // Notify dashboard that a task was completed
       localStorage.setItem("justCompletedTask", JSON.stringify({
         id: taskId,
         points: currentTaskPoints,
@@ -332,11 +329,11 @@ async function awardPointsViaAPI() {
         window.location.href = "dashboard.html";
       }, 2000);
     } else {
-      reviewStatusDiv.innerHTML = '<div class="review-badge" style="background:#ef4444;">❌ ' + result.error + '</div>';
-      statusEl.innerText = result.error;
-      showToast(result.error, true);
-      uploadBtn.disabled = true;  // no retry
-      completionLock = false;     // allow maybe later? but points not awarded
+      reviewStatusDiv.innerHTML = '<div class="review-badge" style="background:#ef4444;">❌ ' + (result.error || result.message) + '</div>';
+      statusEl.innerText = result.error || result.message || "Failed to award points";
+      showToast(result.error || "Unknown error", true);
+      uploadBtn.disabled = true;
+      completionLock = false;
     }
   } catch (err) {
     console.error(err);

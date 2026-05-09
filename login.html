@@ -5,6 +5,7 @@
 <title>HYCE Login</title>
 <link rel="stylesheet" href="style.css">
 <style>
+/* ========== YOUR ORIGINAL CSS (unchanged) ========== */
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#fff;min-height:100vh;overflow-x:hidden;background:radial-gradient(circle at top,#1f2a44 0%,#0b0f1a 38%,#050816 100%)}
 body::before{content:"";position:fixed;inset:-20%;background:radial-gradient(circle at 20% 20%,rgba(124,58,237,.18),transparent 28%),radial-gradient(circle at 80% 30%,rgba(74,222,128,.12),transparent 24%),radial-gradient(circle at 50% 85%,rgba(59,130,246,.14),transparent 26%);animation:bgFloat 12s ease-in-out infinite alternate;pointer-events:none}
@@ -55,13 +56,13 @@ body::before{content:"";position:fixed;inset:-20%;background:radial-gradient(cir
     </div>
 
     <div class="field">
-      <input type="password" id="password" placeholder="PIN (4+ digits)" autocomplete="current-password">
+      <input type="password" id="password" placeholder="Password" autocomplete="current-password">
       <button class="toggle-pass" type="button" onclick="togglePassword()" id="toggleBtn">Show</button>
     </div>
 
     <div class="remember-row">
       <label class="remember"><input type="checkbox" id="rememberMe"> Remember me</label>
-      <span class="link" onclick="forgotPassword()">Forgot PIN?</span>
+      <span class="link" onclick="forgotPassword()">Forgot Password?</span>
     </div>
 
     <p id="error" class="error"></p>
@@ -69,134 +70,138 @@ body::before{content:"";position:fixed;inset:-20%;background:radial-gradient(cir
     <button class="btn" id="loginBtn" onclick="login()">Login</button>
     <button class="btn outline" id="signupBtn" onclick="signup()">Sign Up</button>
 
-    <div class="footer-note">By continuing, you agree to use HYCE responsibly. Points are stored securely.</div>
+    <div class="footer-note">By continuing, you agree to use HYCE responsibly. Demo balances and rewards shown are for illustration only.</div>
   </div>
 </div>
 
 <script>
-// ========== NEW GOOGLE SHEETS BACKEND ==========
-const API_URL = "https://script.google.com/macros/s/AKfycbzy8OkQDMQg0z4UCnwPc-5b-yaJkUsHEi6lMDQT09uMw1TUPz2dQrbZKQmsvd42hrLH/exec";
-
+const API_URL = "https://script.google.com/macros/s/AKfycbwqYH4fXKCb5gW0yxRV_6DkPVC5wPXF9z0TO93W49-EGetANPv5kkovCoXt-qa07N4Tpw/exec";
 const usernameEl = document.getElementById('username');
-const pinEl = document.getElementById('password');   // field labeled "Password" but used as PIN
+const passwordEl = document.getElementById('password');
 const errorEl = document.getElementById('error');
 const loginBtn = document.getElementById('loginBtn');
 const signupBtn = document.getElementById('signupBtn');
 const rememberMe = document.getElementById('rememberMe');
 
-// Helper: API call
-async function apiCall(action, params, method = 'POST') {
-  const url = new URL(API_URL);
-  url.searchParams.append('action', action);
-  Object.keys(params).forEach(k => url.searchParams.append(k, params[k]));
-  const res = await fetch(url.toString(), { method });
-  return res.json();
-}
-
-// Check for remembered username
-if (localStorage.getItem('hyceRememberedUsername')) {
+if(localStorage.getItem('hyceRememberedUsername')){
   usernameEl.value = localStorage.getItem('hyceRememberedUsername');
   rememberMe.checked = true;
 }
 
-function setLoading(btn, text) {
+function setLoading(btn, text){
   btn.disabled = true;
   btn.dataset.text = btn.innerHTML;
   btn.innerHTML = '<span class="loading"></span>' + text;
 }
-function clearLoading(btn) {
+function clearLoading(btn){
   btn.disabled = false;
-  if (btn.dataset.text) btn.innerHTML = btn.dataset.text;
+  if(btn.dataset.text) btn.innerHTML = btn.dataset.text;
 }
-function togglePassword() {
-  const visible = pinEl.type === 'text';
-  pinEl.type = visible ? 'password' : 'text';
+function togglePassword(){
+  const visible = passwordEl.type === 'text';
+  passwordEl.type = visible ? 'password' : 'text';
   document.getElementById('toggleBtn').innerText = visible ? 'Show' : 'Hide';
 }
 
-// LOGIN: verify username exists and PIN matches
+// LOGIN FUNCTION – FIXED to set correct localStorage keys and redirect properly
 async function login() {
-  const username = usernameEl.value.trim();
-  const pin = pinEl.value.trim();
-  if (!username || !pin) {
-    errorEl.innerText = "Username and PIN required";
+  let username = usernameEl.value.trim();
+  let password = passwordEl.value.trim();
+  let error = errorEl;
+
+  if (!username || !password) {
+    error.innerText = "Please fill all fields";
     return;
   }
-  errorEl.innerText = "Checking...";
+
+  error.innerText = "Checking...";
   setLoading(loginBtn, 'Logging in...');
 
   try {
-    // First check if user exists
-    const getRes = await apiCall('getPoints', { username }, 'GET');
-    if (!getRes.success) {
-      errorEl.innerText = getRes.error || "User not found";
-      clearLoading(loginBtn);
-      return;
-    }
-    // Verify PIN by attempting to add 0 points (this will test PIN validity)
-    const verifyRes = await apiCall('addPoints', { username, pin, taskId: 0, points: 0 });
-    if (!verifyRes.success) {
-      errorEl.innerText = "Invalid PIN";
-      clearLoading(loginBtn);
-      return;
-    }
-    // Success
-    localStorage.setItem("hyce_user", username);
-    localStorage.setItem("hyce_pin", pin);
-    if (rememberMe.checked) {
-      localStorage.setItem('hyceRememberedUsername', username);
+    const res = await fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "login",
+        username: username,
+        password: password
+      })
+    });
+
+    const data = await res.json();
+
+    if (data.status === "success") {
+      // Set both old and new localStorage keys for compatibility
+      localStorage.setItem("username", username);
+      localStorage.setItem("hyce_user", username);
+      localStorage.setItem("hyce_pin", password);   // store password as PIN
+      if (rememberMe.checked) {
+        localStorage.setItem('hyceRememberedUsername', username);
+      } else {
+        localStorage.removeItem('hyceRememberedUsername');
+      }
+      // Redirect to dashboard
+      window.location.href = "dashboard.html";
     } else {
-      localStorage.removeItem('hyceRememberedUsername');
+      error.innerText = "Invalid username or password";
     }
-    window.location.href = "dashboard.html";
+
   } catch (err) {
-    errorEl.innerText = "Connection error";
+    error.innerText = "Connection error: " + err.message;
     console.error(err);
   } finally {
     clearLoading(loginBtn);
   }
 }
 
-// SIGNUP: register new user
+// SIGNUP FUNCTION – fixed to show clearer messages (uses your old backend)
 async function signup() {
-  const username = usernameEl.value.trim();
-  const pin = pinEl.value.trim();
-  if (!username || !pin) {
-    errorEl.innerText = "Username and PIN required";
+  let username = usernameEl.value.trim();
+  let password = passwordEl.value.trim();
+  let error = errorEl;
+
+  if (!username || !password) {
+    error.innerText = "Please fill all fields";
     return;
   }
-  if (pin.length < 4) {
-    errorEl.innerText = "PIN must be at least 4 digits";
-    return;
-  }
-  errorEl.innerText = "Creating account...";
+
+  error.innerText = "Creating account...";
   setLoading(signupBtn, 'Creating...');
 
   try {
-    const regRes = await apiCall('register', { username, pin });
-    if (regRes.success) {
-      errorEl.innerText = regRes.message || "Account created! You can now log in.";
-      // Optionally auto-login after signup? We'll just show success.
-      if (rememberMe.checked) localStorage.setItem('hyceRememberedUsername', username);
-      // Clear pin field or keep? Not auto-login for security.
-      pinEl.value = '';
-      // But also you could auto-login: uncomment next lines
-      // localStorage.setItem("hyce_user", username);
-      // localStorage.setItem("hyce_pin", pin);
-      // window.location.href = "dashboard.html";
+    const res = await fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "signup",
+        username: username,
+        password: password
+      })
+    });
+
+    const data = await res.json();
+
+    if (data.status === "exists") {
+      error.innerText = "Username already taken";
+    } else if (data.status === "success") {
+      error.innerText = "Account created! You can now log in.";
+      if (rememberMe.checked) {
+        localStorage.setItem('hyceRememberedUsername', username);
+      }
+      // Optional: auto-login after signup? We'll keep manual login.
     } else {
-      errorEl.innerText = regRes.error || "Registration failed";
+      error.innerText = "Something went wrong";
     }
+
   } catch (err) {
-    errorEl.innerText = "Error connecting server";
+    error.innerText = "Error creating account: " + err.message;
     console.error(err);
   } finally {
     clearLoading(signupBtn);
   }
 }
 
-function forgotPassword() {
-  alert("To reset your PIN, please contact support via the contact page.");
+// FORGOT PASSWORD
+function forgotPassword(){
+  alert("Contact admin to reset your password.");
 }
 </script>
 </body>
