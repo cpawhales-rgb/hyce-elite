@@ -267,6 +267,7 @@ imageInput.addEventListener('change', function(e) {
   }
 });
 
+// ========== 🔁 MODIFIED START TASK FUNCTION ==========
 function startTask() {
   if (isTaskOnCooldown()) {
     showToast('Task already completed (cooldown active)', true);
@@ -285,10 +286,9 @@ function startTask() {
   
   setTimeout(()=>{
     loader.style.display='none';
-    window.open(taskLinks[taskId-1], "_blank");
-    statusEl.innerText = 'Task opened! Complete it, take screenshot, then upload here.';
-    startBtn.disabled = true;
-    showToast("Task opened in new tab. Come back and upload proof!");
+    // 🔁 REDIRECT TO TASK PANEL INSTEAD OF OPENING NEW TAB
+    window.location.href = 'taskpanel.html?id=' + taskId;
+    // NOTE: statusEl and startBtn disabled will be preserved because page unloads
   }, 900);
 }
 
